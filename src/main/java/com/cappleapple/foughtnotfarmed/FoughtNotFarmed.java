@@ -8,6 +8,7 @@ import com.cappleapple.foughtnotfarmed.registry.ModEntities;
 import com.cappleapple.foughtnotfarmed.respawn.LivingSpawnerRespawnManager;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
@@ -31,6 +32,7 @@ public final class FoughtNotFarmed {
         NeoForge.EVENT_BUS.addListener(SpawnerConversionManager::onLevelUnload);
         NeoForge.EVENT_BUS.addListener(SpawnerConversionManager::onLevelTick);
         NeoForge.EVENT_BUS.addListener(LivingSpawnerRespawnManager::onLevelTick);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, LivingSpawnerRespawnManager::onBlockBreak);
         NeoForge.EVENT_BUS.addListener(SpawnerConversionManager::onBlockPlaced);
         NeoForge.EVENT_BUS.addListener(FoughtNotFarmedCommands::register);
     }

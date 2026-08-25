@@ -90,10 +90,20 @@ class SpawnerStateTest {
 
         assertEquals(64, state.spawnCount());
         assertEquals(256, state.maxNearbyEntities());
-        assertEquals(1, state.requiredPlayerRange());
+        assertEquals(16, state.requiredPlayerRange());
         assertEquals(64, state.spawnRange());
         assertEquals(1, state.minSpawnDelay());
         assertEquals(1, state.maxSpawnDelay());
+    }
+
+    @Test
+    void recoversZeroPlayerRangeFromPreviouslyDeactivatedSpawner() {
+        CompoundTag tag = tagWithCurrent("minecraft:zombie");
+        tag.putInt("RequiredPlayerRange", 0);
+
+        SpawnerState state = SpawnerState.decode(tag, message -> {}).orElseThrow();
+
+        assertEquals(16, state.requiredPlayerRange());
     }
 
     @Test

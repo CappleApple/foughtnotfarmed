@@ -77,6 +77,7 @@ public final class CommonConfig {
     public static final ModConfigSpec.DoubleValue RESPAWN_DELAY_MINUTES;
     public static final ModConfigSpec.EnumValue<RespawnClock> RESPAWN_CLOCK;
     public static final ModConfigSpec.BooleanValue HEALTH_ADJUSTED_RESPAWN_DELAY;
+    public static final ModConfigSpec.BooleanValue LEAVE_DORMANT_SPAWNER_BLOCK;
 
     public static final ModConfigSpec.DoubleValue SPAWN_COUNT_MULTIPLIER;
     public static final ModConfigSpec.EnumValue<MaxActiveMode> MAX_ACTIVE_MODE;
@@ -166,6 +167,9 @@ public final class CommonConfig {
             .defineEnum("clock", RespawnClock.SERVER_TIME);
         HEALTH_ADJUSTED_RESPAWN_DELAY = BUILDER.comment("Scale delay by maximum health divided by the default 50-health baseline.")
             .define("scaleDelayWithMaxHealth", false);
+        LEAVE_DORMANT_SPAWNER_BLOCK = BUILDER.comment(
+            "Replace a defeated Living Spawner with an inactive vanilla spawner block until it respawns."
+        ).define("leaveDormantSpawnerBlock", false);
         BUILDER.pop();
 
         BUILDER.push("spawning");

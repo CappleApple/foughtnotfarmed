@@ -91,7 +91,7 @@ public final class SpawnerState {
         int delay = bounded(tag, "Delay", 20, -1, MAX_DELAY);
         int count = bounded(tag, "SpawnCount", 4, 1, MAX_SPAWN_COUNT);
         int nearby = bounded(tag, "MaxNearbyEntities", 6, 0, MAX_NEARBY);
-        int playerRange = bounded(tag, "RequiredPlayerRange", 16, 1, MAX_RANGE);
+        int playerRange = positiveBounded(tag, "RequiredPlayerRange", 16, MAX_RANGE);
         int range = bounded(tag, "SpawnRange", 4, 0, 64);
 
         SpawnerState state = new SpawnerState(
@@ -116,6 +116,11 @@ public final class SpawnerState {
     private static int bounded(CompoundTag tag, String key, int fallback, int min, int max) {
         int value = tag.contains(key, Tag.TAG_ANY_NUMERIC) ? tag.getInt(key) : fallback;
         return Mth.clamp(value, min, max);
+    }
+
+    private static int positiveBounded(CompoundTag tag, String key, int fallback, int max) {
+        int value = tag.contains(key, Tag.TAG_ANY_NUMERIC) ? tag.getInt(key) : fallback;
+        return value > 0 ? Math.min(value, max) : fallback;
     }
 
     public Set<ResourceLocation> entityIds() {

@@ -17,12 +17,12 @@ Fought Not Farmed turns ordinary mob spawner blocks into stationary, attackable 
 - Java 21 on servers and development machines
 - The mod must be installed on both the server and connecting clients
 
-No library mods are required. Fought Not Farmed does not use mixins and does not replace Minecraft's terrain or structure-generation systems.
+No library mods are required. Fought Not Farmed does not replace Minecraft's terrain or structure-generation systems. Its only mixin is a narrow tick guard that pauses a marked dormant vanilla spawner without changing the block's spawner data.
 
 ## Installation
 
 1. Install NeoForge for Minecraft 1.21.1.
-2. Place `foughtnotfarmed-1.2.1.jar` in the instance's `mods` directory.
+2. Place `foughtnotfarmed-1.3.jar` in the instance's `mods` directory.
 3. Install the same JAR on the dedicated server and every client.
 4. Start the game or server once to generate the configuration files.
 
@@ -38,6 +38,7 @@ No library mods are required. Fought Not Farmed does not use mixins and does not
 - It drops 15 XP when killed by a player and no item loot by default.
 - Enemies already summoned remain alive after the Living Spawner is destroyed.
 - A destroyed Living Spawner returns at its death position after 30 minutes of loaded server time by default. Respawning, the delay, server-time versus system-time tracking, and health-based delay scaling are configurable.
+- Optionally, defeat can leave a deactivated vanilla spawner block containing the preserved mob data. It can be mined by compatible spawner-mining mods, or it turns back into the Living Spawner when its respawn timer expires.
 - The cage uses Minecraft's spawner block model and renders the current mob preview with any available modded entity renderer.
 - Active cages emit vanilla smoke and flame particles. During the configurable warning window they shake and sound an alert, then briefly grow and shrink after a successful spawn cycle.
 
@@ -60,7 +61,7 @@ Important groups include:
 
 - `conversion`: automatic conversion, one-time chance, old/runtime chunk handling, player placement policy, entity/dimension filters, scan budgets, and encased-spawner relocation.
 - `combat`: health/scaling, armor, knockback resistance, damage categories, and global damage multiplier.
-- `respawning`: enablement, delay, clock source, and optional maximum-health scaling.
+- `respawning`: enablement, delay, clock source, optional maximum-health scaling, and the dormant vanilla-spawner phase.
 - `spawning`: spawn-count/delay/range multipliers, active-summon policy, line of sight, boss policy, Peaceful behavior, and warning timing.
 - `rewards`: XP, loot table, and whether loaded tracked summons are discarded on death.
 - client config: activation particles, cage shake, preview rotation, and visual hover amount.

@@ -589,7 +589,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         this.entityData.set(ACTIVE, false);
         this.setPreparingToSpawn(false);
         if (this.level() instanceof ServerLevel serverLevel) {
-            LivingSpawnerRespawnManager.schedule(serverLevel, this);
+            LivingSpawnerRespawnManager.onDefeated(serverLevel, this);
             if (CommonConfig.DESPAWN_SUMMONS_ON_DEATH.get()) {
                 this.discardTrackedSummons(serverLevel);
             }

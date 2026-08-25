@@ -12,6 +12,9 @@ description='''
 Turns mob spawners into destructible hostile entities that summon enemies until defeated, transforming dungeon spawners from farms into combat objectives.
 '''
 
+[[mixins]]
+config="foughtnotfarmed.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3 - 2026-08-25
+
+### Added
+
+- Added an opt-in dormant phase that replaces a defeated Living Spawner with a deactivated vanilla spawner block containing its preserved mob data.
+- Dormant blocks can be mined through compatible spawner-mining mods; mining or replacing the marked block cancels its pending reactivation.
+
+### Changed
+
+- A dormant block that remains at the death position turns back into a full-health Living Spawner when its configured respawn deadline expires.
+
+### Fixed
+
+- Dormant vanilla spawners now preserve their original activation range and pause through a narrow tick guard, preventing compatible mining or replacement flows from producing effectively inactive Living Spawners.
+
 ## 1.2.1 - 2026-08-17
 
 ### Added

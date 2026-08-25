@@ -8,13 +8,13 @@ Run with Java 21:
 .\gradlew.bat test build --stacktrace
 ```
 
-The unit suite covers vanilla defaults, malformed/empty state, weighted pools, custom modded entity NBT, round-trip persistence, spawn-delay multiplication, health modes, respawn-delay clock units and health scaling, active-cap modes, range tuning, hard bounds, and explicit whitelist/blacklist semantics.
+The unit suite covers vanilla defaults, malformed/empty state, weighted pools, custom modded entity NBT, round-trip persistence, spawn-delay multiplication, health modes, respawn-delay clock units and health scaling, dormant-state preservation, active-cap modes, range tuning, hard bounds, and explicit whitelist/blacklist semantics.
 
 ## Dedicated-server smoke test
 
 1. Run `.\gradlew.bat runServer`.
 2. Accept `eula=true` in the generated development server when needed.
-3. Confirm NeoForge discovers `Fought Not Farmed 1.2` without loading client renderer classes.
+3. Confirm NeoForge discovers `Fought Not Farmed 1.3` without loading client renderer classes.
 4. Confirm a world is created and the log reaches `Done`.
 5. Stop through the server console or RCON.
 6. Confirm the world saves and shutdown completes cleanly.
@@ -56,6 +56,10 @@ The Gradle client run uses `run-client/` while the dedicated server uses `run/`,
 - With `clock="SYSTEM_TIME"`, stop beyond the deadline and confirm the cage returns when its dimension and death chunk load.
 - Enable `scaleDelayWithMaxHealth` and confirm 100 maximum health takes twice the configured delay while 25 health takes half.
 - Disable respawning, kill a cage, and confirm no record is scheduled. Unload a death chunk before a due timer and confirm it is not force-loaded.
+- Enable `leaveDormantSpawnerBlock`, kill a cage, and confirm a vanilla spawner with the correct mob preview and original `RequiredPlayerRange` remains but does not activate, spin, emit flame/smoke, or spawn mobs.
+- Leave that marked block in place and confirm the deadline atomically replaces it with one full-health Living Spawner.
+- Mine a dormant block with a compatible spawner-mining mod and confirm the item retains its original mob data and no Living Spawner later appears at the old position.
+- Replace a dormant block through a command or another mod and confirm its pending reactivation is cancelled.
 
 ### Client and compatibility
 

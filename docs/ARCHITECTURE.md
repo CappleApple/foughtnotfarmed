@@ -42,9 +42,13 @@ Every successfully inserted root entity receives the Living Spawner UUID in NeoF
 
 When respawning is enabled, death stores a per-dimension `SavedData` record containing the death position, original conversion position, complete current spawner NBT, chosen clock mode, and due time. The clock mode is captured when the cage dies, so changing the config later does not reinterpret an existing timer.
 
+The optional dormant phase places a real vanilla spawner at the death anchor and assigns the block plus pending record a shared UUID. The block retains the original spawner state both as its live data and in NeoForge persistent data. A narrow `BaseSpawner` mixin pauses client and server ticks only while that private marker remains at its recorded position and dimension, disabling activation without contaminating data seen by compatible mining or transport mods. Conversion scans skip only the correctly anchored marker, so copied block-entity data cannot leave a transported spawner dormant.
+
+A lowest-priority player break listener restores the original state before normal harvesting and removes the UUID-matched pending record. This lets compatible mining mods capture ordinary spawner data and prevents a mined block from later reactivating at its former position. Direct replacement or removal is detected from the missing/mismatched UUID at the deadline and also cancels reactivation.
+
 `SERVER_TIME` stores a due game tick. World game time does not advance while the server is stopped, so offline time is excluded. `SYSTEM_TIME` stores an epoch-millisecond deadline and therefore includes offline wall-clock time. Optional health adjustment multiplies the configured delay by `maximum health / 50`.
 
-Due records are processed once per second. They do not force-load chunks: a due record remains queued until its death chunk is loaded. Respawn recreates a full-health Living Spawner at the death anchor from the stored state. If another living cage already occupies that anchor, the record is treated as fulfilled; a rejected entity insertion is retained and retried later.
+Due records are processed once per second. They do not force-load chunks: a due record remains queued until its death chunk is loaded. Respawn recreates a full-health Living Spawner at the death anchor from the stored state. A dormant record first verifies the exact marked block, adds the entity, and removes that block; a missing or replaced block cancels the record. If another living cage already occupies the anchor, the record is treated as fulfilled; a rejected entity insertion is retained and retried later.
 
 ## Entity and sided design
 

@@ -9,6 +9,8 @@ import com.cappleapple.foughtnotfarmed.spawner.SpawnerState;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
+import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
@@ -20,7 +22,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.phys.AABB;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 /** Persistent, per-dimension queue for Living Spawners destroyed by players or other damage. */
@@ -36,8 +42,20 @@ public final class LivingSpawnerRespawnManager extends SavedData {
 
     private final List<PendingRespawn> entries = new ArrayList<>();
 
-    public static void schedule(ServerLevel level, LivingSpawnerEntity spawner) {
-        if (!CommonConfig.RESPAWN_ENABLED.get() || spawner.spawnerState() == null) {
+    public static void onDefeated(ServerLevel level, LivingSpawnerEntity spawner) {
+        if (spawner.spawnerState() == null) {
+            return;
+        }
+
+        CompoundTag spawnerState = spawner.spawnerState().save();
+        UUID dormantId = null;
+        if (CommonConfig.LEAVE_DORMANT_SPAWNER_BLOCK.get()) {
+            UUID candidateId = UUID.randomUUID();
+            if (placeDormantBlock(level, spawner.blockPosition(), candidateId, spawnerState)) {
+                dormantId = candidateId;
+            }
+        }
+        if (!CommonConfig.RESPAWN_ENABLED.get()) {
             return;
         }
 
@@ -55,14 +73,38 @@ public final class LivingSpawnerRespawnManager extends SavedData {
         PendingRespawn entry = new PendingRespawn(
             spawner.blockPosition().immutable(),
             spawner.conversionSourcePos().immutable(),
-            spawner.spawnerState().save(),
+            spawnerState,
             clock,
             dueServerTick,
-            dueEpochMillis
+            dueEpochMillis,
+            dormantId
         );
         LivingSpawnerRespawnManager data = get(level);
         data.entries.add(entry);
         data.setDirty();
+    }
+
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.isCanceled()
+            || !(event.getLevel() instanceof ServerLevel level)
+            || !(level.getBlockEntity(event.getPos()) instanceof SpawnerBlockEntity blockEntity)
+            || !DormantSpawnerData.isDormant(blockEntity)) {
+            return;
+        }
+
+        CompoundTag originalState = DormantSpawnerData.originalState(blockEntity).orElse(null);
+        UUID dormantId = DormantSpawnerData.id(blockEntity).orElse(null);
+        if (originalState == null) {
+            FoughtNotFarmed.LOGGER.warn("Dormant spawner at {} in {} has no stored original state", event.getPos(), level.dimension().location());
+            return;
+        }
+
+        blockEntity.getSpawner().load(level, event.getPos(), originalState);
+        DormantSpawnerData.clear(blockEntity);
+        level.sendBlockUpdated(event.getPos(), event.getState(), event.getState(), Block.UPDATE_ALL);
+        if (dormantId != null) {
+            get(level).cancel(dormantId);
+        }
     }
 
     public static void onLevelTick(LevelTickEvent.Post event) {
@@ -86,7 +128,18 @@ public final class LivingSpawnerRespawnManager extends SavedData {
             if (!entry.isDue(level.getGameTime(), nowMillis) || !isChunkLoaded(level, entry.deathPos())) {
                 continue;
             }
+            SpawnerBlockEntity dormantBlock = entry.dormantId() == null
+                ? null
+                : matchingDormantBlock(level, entry.deathPos(), entry.dormantId());
+            if (entry.dormantId() != null && dormantBlock == null) {
+                iterator.remove();
+                changed = true;
+                continue;
+            }
             if (hasLivingSpawnerAt(level, entry.deathPos())) {
+                if (dormantBlock != null) {
+                    level.setBlock(entry.deathPos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                }
                 iterator.remove();
                 changed = true;
                 continue;
@@ -118,6 +171,15 @@ public final class LivingSpawnerRespawnManager extends SavedData {
                 changed = true;
                 continue;
             }
+            if (dormantBlock != null
+                && (!DormantSpawnerData.matches(dormantBlock, entry.dormantId())
+                    || !level.setBlock(entry.deathPos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL)
+                    || !level.getBlockState(entry.deathPos()).isAir())) {
+                replacement.discard();
+                entry.postpone(level.getGameTime(), nowMillis);
+                changed = true;
+                continue;
+            }
 
             iterator.remove();
             changed = true;
@@ -131,6 +193,42 @@ public final class LivingSpawnerRespawnManager extends SavedData {
         if (changed) {
             this.setDirty();
         }
+    }
+
+    private void cancel(UUID dormantId) {
+        if (this.entries.removeIf(entry -> dormantId.equals(entry.dormantId()))) {
+            this.setDirty();
+        }
+    }
+
+    private static boolean placeDormantBlock(
+        ServerLevel level,
+        BlockPos pos,
+        UUID dormantId,
+        CompoundTag originalState
+    ) {
+        if (!level.setBlock(pos, Blocks.SPAWNER.defaultBlockState(), Block.UPDATE_ALL)) {
+            FoughtNotFarmed.LOGGER.warn("Could not place dormant spawner at {} in {}", pos, level.dimension().location());
+            return false;
+        }
+        if (!(level.getBlockEntity(pos) instanceof SpawnerBlockEntity blockEntity)) {
+            FoughtNotFarmed.LOGGER.warn("Dormant spawner block entity was unavailable at {} in {}", pos, level.dimension().location());
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            return false;
+        }
+        blockEntity.getSpawner().load(level, pos, originalState);
+        DormantSpawnerData.mark(blockEntity, dormantId, originalState);
+        level.sendBlockUpdated(pos, level.getBlockState(pos), level.getBlockState(pos), Block.UPDATE_ALL);
+        return true;
+    }
+
+    @Nullable
+    private static SpawnerBlockEntity matchingDormantBlock(ServerLevel level, BlockPos pos, UUID dormantId) {
+        return level.getBlockState(pos).is(Blocks.SPAWNER)
+            && level.getBlockEntity(pos) instanceof SpawnerBlockEntity blockEntity
+            && DormantSpawnerData.matches(blockEntity, dormantId)
+            ? blockEntity
+            : null;
     }
 
     private static boolean hasLivingSpawnerAt(ServerLevel level, BlockPos pos) {
@@ -182,6 +280,8 @@ public final class LivingSpawnerRespawnManager extends SavedData {
         private final RespawnClock clock;
         private long dueServerTick;
         private long dueEpochMillis;
+        @Nullable
+        private final UUID dormantId;
 
         private PendingRespawn(
             BlockPos deathPos,
@@ -189,7 +289,8 @@ public final class LivingSpawnerRespawnManager extends SavedData {
             CompoundTag spawnerState,
             RespawnClock clock,
             long dueServerTick,
-            long dueEpochMillis
+            long dueEpochMillis,
+            @Nullable UUID dormantId
         ) {
             this.deathPos = deathPos;
             this.conversionSourcePos = conversionSourcePos;
@@ -197,6 +298,7 @@ public final class LivingSpawnerRespawnManager extends SavedData {
             this.clock = clock;
             this.dueServerTick = dueServerTick;
             this.dueEpochMillis = dueEpochMillis;
+            this.dormantId = dormantId;
         }
 
         private boolean isDue(long gameTime, long nowMillis) {
@@ -219,6 +321,9 @@ public final class LivingSpawnerRespawnManager extends SavedData {
             tag.putString("Clock", this.clock.name());
             tag.putLong("DueServerTick", this.dueServerTick);
             tag.putLong("DueEpochMillis", this.dueEpochMillis);
+            if (this.dormantId != null) {
+                tag.putUUID("DormantId", this.dormantId);
+            }
             return tag;
         }
 
@@ -238,7 +343,8 @@ public final class LivingSpawnerRespawnManager extends SavedData {
                 tag.getCompound("SpawnerState"),
                 clock,
                 tag.getLong("DueServerTick"),
-                tag.getLong("DueEpochMillis")
+                tag.getLong("DueEpochMillis"),
+                tag.hasUUID("DormantId") ? tag.getUUID("DormantId") : null
             ));
         }
 
@@ -252,6 +358,11 @@ public final class LivingSpawnerRespawnManager extends SavedData {
 
         private CompoundTag spawnerState() {
             return this.spawnerState;
+        }
+
+        @Nullable
+        private UUID dormantId() {
+            return this.dormantId;
         }
     }
 }

@@ -256,6 +256,7 @@ The `[respawning]` section controls whether a destroyed Living Spawner returns a
 | `delayMinutes` | `30.0` | `0.0` to `10080.0` | Base delay in minutes. Fractional values are allowed; `0.5` is 30 seconds and `0.0` respawns on the next once-per-second queue pass. |
 | `clock` | `"SERVER_TIME"` | `"SERVER_TIME"`, `"SYSTEM_TIME"` | Selects loaded server ticks or real-world system time. Exact behavior is described below. |
 | `scaleDelayWithMaxHealth` | `false` | `true`, `false` | When enabled, multiplies the base delay by the destroyed cage's maximum health divided by 50. |
+| `leaveDormantSpawnerBlock` | `false` | `true`, `false` | When enabled, defeat places a marked, deactivated vanilla spawner block at the cage's death position. If respawning is enabled and the block remains there, it turns back into the Living Spawner at the deadline. |
 
 The clock mode is saved into each respawn record when the Living Spawner dies. Changing `clock` later applies only to deaths scheduled afterward.
 
@@ -263,6 +264,12 @@ The clock mode is saved into each respawn record when the Living Spawner dies. C
 - `SYSTEM_TIME` stores a wall-clock deadline. Time while the server is stopped counts toward the delay; an overdue cage returns after its dimension and death chunk load.
 
 Respawn records preserve the complete current spawner state, including weighted entries and custom entity NBT. A replacement returns at full configured health at its death anchor, even if that location is encased. Respawning does not rerun conversion relocation because doing so would move the cage away from where it died.
+
+With `leaveDormantSpawnerBlock=true`, the defeated cage immediately becomes a real `minecraft:spawner` block containing the preserved mob preview, weighted entries, entity NBT, and activation range. A narrow tick guard pauses that marked block's vanilla client and server spawner ticks, so it does not spin, emit vanilla active-spawner particles, or summon mobs. Its normal spawner data remains unchanged for compatible mining and transport mods. The private marker is anchored to the death position and dimension, so a mod that copies all block-entity data into a mined spawner cannot keep the spawner dormant after moving it. Automatic scans and conversion commands leave only the correctly anchored dormant block alone.
+
+If `enabled=true`, the respawn deadline is attached to that exact marked block. At the deadline it is removed and the full-health Living Spawner returns. Mining or replacing the block first cancels that reactivation, so a mined spawner cannot also respawn at its old location. Immediately before a normal player break is processed, the marker is removed and the preserved state is restored; compatible spawner-mining mods therefore receive ordinary active spawner data.
+
+If `enabled=false`, no reactivation is scheduled and the dormant block remains until a player or another system removes it. Enabling respawns later does not retroactively schedule blocks created while respawning was disabled.
 
 The queue never force-loads a death chunk. If the timer becomes due while that chunk is unloaded, the record waits until the chunk is loaded. If another living cage already occupies the death anchor, the pending record is removed instead of making a duplicate. Turning `enabled` off pauses processing of already-pending records without deleting them; if it is enabled again, overdue records can complete.
 
@@ -274,6 +281,7 @@ enabled = true
 delayMinutes = 30.0
 clock = "SERVER_TIME"
 scaleDelayWithMaxHealth = false
+leaveDormantSpawnerBlock = false
 ```
 
 Example that includes offline time and scales tougher cages to take longer:
@@ -284,6 +292,7 @@ enabled = true
 delayMinutes = 30.0
 clock = "SYSTEM_TIME"
 scaleDelayWithMaxHealth = true
+leaveDormantSpawnerBlock = true
 ```
 
 With scaling enabled, the formula is:
@@ -495,6 +504,7 @@ enabled = true
 delayMinutes = 30.0
 clock = "SERVER_TIME"
 scaleDelayWithMaxHealth = false
+leaveDormantSpawnerBlock = false
 
 [spawning]
 spawnCountMultiplier = 1.0
@@ -604,6 +614,7 @@ The `/foughtnotfarmed debug` command reports the targeted Living Spawner's prese
 - A living cage at the same anchor fulfills and removes the record instead of producing a duplicate.
 - The clock and effective delay are captured at death. Later config changes affect newly scheduled deaths, not existing records.
 - With `scaleDelayWithMaxHealth=true`, maximum health above 50 extends the configured delay.
+- With `leaveDormantSpawnerBlock=true`, the exact marked vanilla spawner must still occupy the death position. Mining or replacing it intentionally cancels reactivation.
 
 ### A supporting value appears to do nothing
 

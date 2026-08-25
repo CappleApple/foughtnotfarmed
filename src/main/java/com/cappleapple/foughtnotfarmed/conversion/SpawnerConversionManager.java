@@ -4,6 +4,7 @@ import com.cappleapple.foughtnotfarmed.FoughtNotFarmed;
 import com.cappleapple.foughtnotfarmed.config.CommonConfig;
 import com.cappleapple.foughtnotfarmed.entity.LivingSpawnerEntity;
 import com.cappleapple.foughtnotfarmed.registry.ModEntities;
+import com.cappleapple.foughtnotfarmed.respawn.DormantSpawnerData;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerEligibility;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerState;
 import java.util.ArrayDeque;
@@ -156,6 +157,9 @@ public final class SpawnerConversionManager {
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (!(blockEntity instanceof SpawnerBlockEntity spawnerBlockEntity)) {
             return ConversionResult.skipped("spawner block entity is unavailable at " + pos.toShortString());
+        }
+        if (DormantSpawnerData.isDormant(spawnerBlockEntity)) {
+            return ConversionResult.skipped("spawner is dormant until its Living Spawner respawn deadline");
         }
         if (cause != Cause.COMMAND && spawnerBlockEntity.getPersistentData().getBoolean(PLAYER_KEEP_MARKER)) {
             return ConversionResult.skipped("player-placed spawner is configured to remain a block");
