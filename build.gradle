@@ -35,6 +35,12 @@ neoForge {
             server()
             programArgument '--nogui'
         }
+
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = project.layout.projectDirectory.dir('run-gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', "${project.mod_id},minecraft"
+        }
     }
 
     mods {
@@ -57,6 +63,10 @@ dependencies {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+}
+
+tasks.named('jar', Jar).configure {
+    exclude 'com/cappleapple/foughtnotfarmed/gametest/**'
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

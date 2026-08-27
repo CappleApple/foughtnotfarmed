@@ -45,15 +45,6 @@ class SpawnerTuningTest {
     }
 
     @Test
-    void warningWindowHasExplicitBoundariesAndCanBeDisabled() {
-        assertEquals(false, SpawnerTuning.isPreparing(41, 40));
-        assertEquals(true, SpawnerTuning.isPreparing(40, 40));
-        assertEquals(true, SpawnerTuning.isPreparing(1, 40));
-        assertEquals(false, SpawnerTuning.isPreparing(0, 40));
-        assertEquals(false, SpawnerTuning.isPreparing(20, 0));
-    }
-
-    @Test
     void fixedHealthIsPredictableOnEveryDifficulty() {
         assertEquals(36.0F, SpawnerTuning.health(36.0, HealthMode.FIXED, 1.0, 200.0, 4, Difficulty.HARD));
     }

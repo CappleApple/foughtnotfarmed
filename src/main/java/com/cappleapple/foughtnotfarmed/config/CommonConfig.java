@@ -187,7 +187,7 @@ public final class CommonConfig {
             .define("allowBossEntities", false);
         ACTIVATE_ON_PEACEFUL = BUILDER.comment("If false, spawning timers pause on Peaceful. If true, normal placement rules still decide what may spawn.")
             .define("activateOnPeaceful", false);
-        SPAWN_WARNING_TICKS = BUILDER.comment("Ticks before a spawn cycle when the cage begins shaking and plays its warning sound. Zero disables the warning.")
+        SPAWN_WARNING_TICKS = BUILDER.comment("Warning duration after a valid spawn candidate is found. Blocked attempts keep blue flames without shaking or sounding an alert. Zero disables the warning.")
             .defineInRange("spawnWarningTicks", 40, 0, 1200);
         BUILDER.pop();
 

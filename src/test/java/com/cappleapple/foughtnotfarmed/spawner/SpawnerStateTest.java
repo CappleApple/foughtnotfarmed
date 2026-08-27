@@ -119,6 +119,30 @@ class SpawnerStateTest {
         assertTrue(state.spawnDelay() < 400);
     }
 
+    @Test
+    void readyCandidateGetsTheFullWarningCountdown() {
+        CompoundTag tag = tagWithCurrent("minecraft:zombie");
+        tag.putInt("Delay", 0);
+        SpawnerState state = SpawnerState.decode(tag, message -> {}).orElseThrow();
+
+        state.beginSpawnWarning(40);
+        for (int remaining = 40; remaining > 0; remaining--) {
+            assertEquals(remaining, state.spawnDelay());
+            state.decrementDelay();
+        }
+        assertEquals(0, state.spawnDelay());
+    }
+
+    @Test
+    void disabledWarningLeavesReadyCandidateDueImmediately() {
+        SpawnerState state = SpawnerState.decode(tagWithCurrent("minecraft:zombie"), message -> {}).orElseThrow();
+
+        state.beginSpawnWarning(0);
+        state.decrementDelay();
+
+        assertEquals(0, state.spawnDelay());
+    }
+
     private static CompoundTag tagWithCurrent(String id) {
         CompoundTag tag = new CompoundTag();
         tag.put("SpawnData", SpawnData.CODEC.encodeStart(NbtOps.INSTANCE, spawnData(id)).getOrThrow());

@@ -6,15 +6,18 @@ Run with Java 21:
 
 ```powershell
 .\gradlew.bat test build --stacktrace
+.\gradlew.bat runGameTestServer --stacktrace
 ```
 
 The unit suite covers vanilla defaults, malformed/empty state, weighted pools, custom modded entity NBT, round-trip persistence, spawn-delay multiplication, health modes, respawn-delay clock units and health scaling, dormant-state preservation, active-cap modes, range tuning, hard bounds, and explicit whitelist/blacklist semantics.
+
+The GameTests exercise real server entity ticks and capture warning sounds, NeoForge finalization/insertion events, and successful-spawn sounds. They cover blocked retries and recovery, candidate invalidation during warning, position-hook denial, disabled warnings, full summon caps, insertion cancellation, and activation loss. They verify synchronized effect flags and event order; client rendering and audio playback still require the gameplay checks below. GameTest classes are excluded from the release JAR.
 
 ## Dedicated-server smoke test
 
 1. Run `.\gradlew.bat runServer`.
 2. Accept `eula=true` in the generated development server when needed.
-3. Confirm NeoForge discovers `Fought Not Farmed 1.3` without loading client renderer classes.
+3. Confirm NeoForge discovers `Fought Not Farmed 1.3.1` without loading client renderer classes.
 4. Confirm a world is created and the log reaches `Done`.
 5. Stop through the server console or RCON.
 6. Confirm the world saves and shutdown completes cleanly.
@@ -67,7 +70,10 @@ The Gradle client run uses `run-client/` while the dedicated server uses `run/`,
 - Encase a spawner, convert it, and confirm it relocates to the nearest loaded configured block position with at least the configured number of exposed faces.
 - Confirm an already exposed spawner remains at its original position and that disabling relocation leaves an encased conversion in place.
 - Confirm active cages emit vanilla smoke and flame particles.
-- Confirm the cage shakes and plays one warning sound when its delay enters `spawnWarningTicks`, then briefly grows and shrinks after a successful spawn cycle.
+- Block every valid spawn location and confirm blue flames persist across multiple retries without cage shake, accelerated preview rotation, warning sounds, or successful-spawn effects.
+- Open a spawn location and confirm one warning sound and the full `spawnWarningTicks` of cage shake precede spawning, followed by the successful-spawn sound and grow/shrink pulse.
+- Block the prepared location during its warning and confirm no mob spawns into the obstruction and failed attempts return to quiet blue flames.
+- Set `spawnWarningTicks=0` and confirm blocked attempts still show blue flames and successful spawns still play their sound and pulse without a warning.
 - Confirm the selected preview rotates, scales, speeds up before spawning, and changes with weighted selection.
 - Join a dedicated server with two clients and confirm one authoritative spawn cycle occurs.
 - Test a normal spawner from at least one structure datapack/mod and one registered modded entity with custom NBT.

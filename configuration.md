@@ -321,7 +321,7 @@ The `[spawning]` section modifies the values preserved from each original vanill
 | `requireLineOfSight` | `false` | `true`, `false` | If enabled, at least one alive, non-spectator player in activation range must have line of sight to the cage. |
 | `allowBossEntities` | `false` | `true`, `false` | Permits entity types in the `foughtnotfarmed:bosses` tag. It does not bypass filters, the hard unsupported tag, or normal spawn rules. |
 | `activateOnPeaceful` | `false` | `true`, `false` | If disabled, activation and delay countdown pause on Peaceful. If enabled, the timer may run, but normal placement rules still determine whether an entity can actually spawn. |
-| `spawnWarningTicks` | `40` | `0` to `1200` | Number of ticks before a spawn attempt when the cage begins shaking and plays one warning sound. `0` disables this warning window. |
+| `spawnWarningTicks` | `40` | `0` to `1200` | Warning duration after a valid spawn candidate is found. The cage shakes and plays one warning sound before spawning. `0` disables this warning window. |
 
 #### Counts, caps, and delays
 
@@ -345,9 +345,11 @@ The current saved countdown is retained across saves. `delayMultiplier` is appli
 
 #### Spawn warning and pulse
 
-When an active countdown enters `spawnWarningTicks`, the server plays `minecraft:block.trial_spawner.detect_player` once and synchronizes the warning state so clients shake the cage. With the default `40`, warning begins about two seconds before the attempt. If the player leaves activation range, the warning and countdown pause; entering the warning window again can play a new alert.
+When an active countdown enters `spawnWarningTicks`, the server first checks the summon cap and looks for a valid spawn candidate using normal collision, placement, custom spawn, and NeoForge position checks. If no location works, blue soul flames remain active while the server retries about once per second, without warning sounds, cage shake, or accelerated preview rotation.
 
-After a cycle successfully creates at least one mob, the server broadcasts a short visual event. Clients scale the cage and its preview up by at most 8%, then smoothly return them to normal over 12 ticks. This pulse is visual only: the entity position and hitbox do not change.
+Once a candidate passes these checks, the server plays `minecraft:block.trial_spawner.detect_player` once and synchronizes the warning state so clients shake the cage. The full configured warning runs before spawning, including after a blocked attempt or an initially shorter countdown. The default `40` gives about two seconds of warning. The prepared candidate's position is checked again at spawn time; if it has become blocked and no other attempt succeeds, the cage returns to quiet blue flames. Leaving activation range clears the prepared candidate and effects; returning validates a fresh candidate before a new warning.
+
+After a cycle successfully inserts at least one entity, the server plays `minecraft:block.trial_spawner.spawn_mob` and broadcasts a short visual event. Clients scale the cage and its preview up by at most 8%, then smoothly return them to normal over 12 ticks. This pulse is visual only: the entity position and hitbox do not change. A cancelled insertion does not produce successful-spawn effects.
 
 Example with a five-second warning:
 
@@ -436,7 +438,7 @@ The client file has no section header. These values affect only presentation on 
 
 | Option | Default | Valid values | Effect |
 | --- | ---: | --- | --- |
-| `particleIntensity` | `"FULL"` | `"OFF"`, `"REDUCED"`, `"FULL"` | Controls vanilla-style smoke/flame particles inside active cages, soul-flame warning particles, and smoke damage particles. `REDUCED` emits them less frequently; `OFF` removes them. |
+| `particleIntensity` | `"FULL"` | `"OFF"`, `"REDUCED"`, `"FULL"` | Controls vanilla-style smoke/flame particles inside active cages, blue soul flames while waiting or warning, and smoke damage particles. `REDUCED` emits them less frequently; `OFF` removes them. |
 | `cageShake` | `true` | `true`, `false` | Enables the small visual cage shake while recently damaged or preparing to spawn. |
 | `previewRotation` | `true` | `true`, `false` | Enables rotation of the entity preview inside the cage. Disabling it leaves the preview visible but stationary. |
 | `hoverAmount` | `0.0` | `0.0` to `0.5` | Raises the rendered cage and preview by this many blocks. This is visual only; the entity's hitbox remains aligned with the original spawner position. |

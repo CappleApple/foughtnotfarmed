@@ -3,6 +3,7 @@ build/
 out/
 run/
 run-client/
+run-gametest/
 .idea/
 *.iml
 *.ipr

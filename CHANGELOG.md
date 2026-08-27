@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 - 2026-08-27
+
+### Fixed
+
+- Living Spawners keep their blue flames while waiting for a valid spawn location without repeatedly shaking or playing warning sounds.
+- The pre-spawn warning starts only after a candidate passes the spawn checks, and the location is checked again before spawning.
+- Cancelled entity insertions no longer trigger successful-spawn effects or count as owned summons.
+
 ## 1.3 - 2026-08-25
 
 ### Added

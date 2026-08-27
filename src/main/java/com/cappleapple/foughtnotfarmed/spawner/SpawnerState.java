@@ -163,8 +163,8 @@ public final class SpawnerState {
         this.selectNext(random);
     }
 
-    public void shortRetryDelay() {
-        this.spawnDelay = 20;
+    public void beginSpawnWarning(int warningTicks) {
+        this.spawnDelay = Mth.clamp(warningTicks, 0, MAX_DELAY);
     }
 
     public void decrementDelay() {

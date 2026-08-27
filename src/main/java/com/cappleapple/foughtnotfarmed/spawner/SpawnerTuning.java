@@ -34,10 +34,6 @@ public final class SpawnerTuning {
         return Mth.clamp((int)Math.round(original * multiplier), 0, 64);
     }
 
-    public static boolean isPreparing(int spawnDelay, int warningTicks) {
-        return warningTicks > 0 && spawnDelay > 0 && spawnDelay <= warningTicks;
-    }
-
     public static float health(
         double baseHealth,
         HealthMode mode,

@@ -70,6 +70,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
     private static final String CONVERSION_SOURCE_POS_KEY = "ConversionSourcePos";
     private static final String SUMMONS_KEY = "Summons";
     private static final int MAX_TRACKED_SUMMONS = 512;
+    private static final int SPAWN_RETRY_TICKS = 20;
     private static final byte SPAWN_PULSE_EVENT = 62;
     private static final int SPAWN_PULSE_DURATION = 12;
     private static final float SPAWN_PULSE_AMOUNT = 0.08F;
@@ -78,6 +79,10 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         EntityDataSerializers.COMPOUND_TAG
     );
     private static final EntityDataAccessor<Boolean> PREPARING_TO_SPAWN = SynchedEntityData.defineId(
+        LivingSpawnerEntity.class,
+        EntityDataSerializers.BOOLEAN
+    );
+    private static final EntityDataAccessor<Boolean> ATTEMPTING_TO_SPAWN = SynchedEntityData.defineId(
         LivingSpawnerEntity.class,
         EntityDataSerializers.BOOLEAN
     );
@@ -99,6 +104,9 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
     private long lastFailureLogTime = Long.MIN_VALUE;
     private String lastFailure = "";
     private int spawnPulseTicks;
+    @Nullable
+    private Entity pendingSpawn;
+    private int spawnRetryTicks;
 
     public LivingSpawnerEntity(EntityType<? extends LivingSpawnerEntity> type, Level level) {
         super(type, level);
@@ -137,6 +145,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         super.defineSynchedData(builder);
         builder.define(PREVIEW_ENTITY, new CompoundTag());
         builder.define(PREPARING_TO_SPAWN, false);
+        builder.define(ATTEMPTING_TO_SPAWN, false);
         builder.define(ACTIVE, false);
     }
 
@@ -171,7 +180,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             this.entityData.set(ACTIVE, this.active);
         }
         if (!this.active) {
-            this.setPreparingToSpawn(false);
+            this.clearSpawnPreparation();
             return;
         }
 
@@ -179,10 +188,45 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             this.spawnerState.resetDelay(serverLevel.random, CommonConfig.DELAY_MULTIPLIER.get());
             this.syncPreview();
         }
-        this.setPreparingToSpawn(SpawnerTuning.isPreparing(
-            this.spawnerState.spawnDelay(),
-            CommonConfig.SPAWN_WARNING_TICKS.get()
-        ));
+        int warningTicks = CommonConfig.SPAWN_WARNING_TICKS.get();
+        if (this.pendingSpawn == null && this.spawnerState.spawnDelay() > warningTicks) {
+            this.spawnerState.decrementDelay();
+            return;
+        }
+
+        this.entityData.set(ATTEMPTING_TO_SPAWN, true);
+        if (this.pendingSpawn == null) {
+            if (this.spawnRetryTicks > 0) {
+                this.spawnRetryTicks--;
+                return;
+            }
+            int attempts = this.availableSpawnAttempts(serverLevel, this.spawnerState);
+            if (attempts == 0) {
+                this.resetSpawnCycle(serverLevel, this.spawnerState);
+                return;
+            }
+            SpawnData spawnData = this.spawnerState.current(serverLevel.random);
+            for (int i = 0; i < attempts && this.pendingSpawn == null && this.isAlive() && !this.spawningStopped; i++) {
+                try {
+                    this.pendingSpawn = this.prepareSpawnOne(serverLevel, spawnData);
+                } catch (RuntimeException exception) {
+                    this.warnRateLimited("Exception while preparing " + spawnData.getEntityToSpawn().getString("id"), exception);
+                    break;
+                }
+            }
+            if (!this.isAlive() || this.spawningStopped) {
+                this.clearSpawnPreparation();
+                return;
+            }
+            if (this.pendingSpawn == null) {
+                this.spawnRetryTicks = SPAWN_RETRY_TICKS;
+                return;
+            }
+            // Keep this exact candidate for the spawn cycle. A second random search after the
+            // warning could fail even though the first search found a usable location.
+            this.spawnerState.beginSpawnWarning(warningTicks);
+            this.setPreparingToSpawn(warningTicks > 0);
+        }
         if (this.spawnerState.spawnDelay() > 0) {
             this.spawnerState.decrementDelay();
             return;
@@ -212,30 +256,21 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         if (state == null) {
             return;
         }
-        SpawnerEligibility.Result eligibility = SpawnerEligibility.evaluate(level, state);
-        if (!eligibility.eligible()) {
-            this.warnRateLimited("Spawn cycle disabled: " + eligibility.reason(), null);
-            state.resetDelay(level.random, CommonConfig.DELAY_MULTIPLIER.get());
-            this.syncPreview();
-            return;
-        }
-
-        int maxActive = this.effectiveMaxActive();
-        int activeCount = this.reconcileSummons(level);
-        if (activeCount >= maxActive) {
-            state.resetDelay(level.random, CommonConfig.DELAY_MULTIPLIER.get());
-            this.syncPreview();
+        int attempts = this.availableSpawnAttempts(level, state);
+        if (attempts == 0) {
+            this.resetSpawnCycle(level, state);
             return;
         }
 
         SpawnData spawnData = state.current(level.random);
-        int attempts = Math.min(this.effectiveSpawnCount(), maxActive - activeCount);
         boolean spawnedAnything = false;
         for (int i = 0; i < attempts && this.isAlive() && !this.spawningStopped; i++) {
             try {
-                Entity spawned = this.trySpawnOne(level, state, spawnData);
-                if (spawned != null) {
-                    this.trackSummon(spawned);
+                Entity candidate = i == 0 ? this.pendingSpawn : this.prepareSpawnOne(level, spawnData);
+                // The world or another mod's position rules may have changed during the warning.
+                if (candidate != null && (i != 0 || this.isValidSpawnCandidate(level, spawnData, candidate))
+                    && this.spawnPreparedEntity(level, spawnData, candidate)) {
+                    this.trackSummon(candidate);
                     spawnedAnything = true;
                 }
             } catch (RuntimeException exception) {
@@ -248,16 +283,38 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             level.levelEvent(2004, this.sourcePos, 0);
             this.playSound(SoundEvents.TRIAL_SPAWNER_SPAWN_MOB, 1.0F, 0.9F + level.random.nextFloat() * 0.2F);
             level.broadcastEntityEvent(this, SPAWN_PULSE_EVENT);
-            state.resetDelay(level.random, CommonConfig.DELAY_MULTIPLIER.get());
-            this.syncPreview();
+            this.resetSpawnCycle(level, state);
         } else {
-            state.shortRetryDelay();
+            this.pendingSpawn = null;
+            this.spawnRetryTicks = SPAWN_RETRY_TICKS;
+            this.setPreparingToSpawn(false);
         }
+    }
+
+    private int availableSpawnAttempts(ServerLevel level, SpawnerState state) {
+        SpawnerEligibility.Result eligibility = SpawnerEligibility.evaluate(level, state);
+        if (!eligibility.eligible()) {
+            this.warnRateLimited("Spawn cycle disabled: " + eligibility.reason(), null);
+            return 0;
+        }
+        return Math.min(this.effectiveSpawnCount(), Math.max(0, this.effectiveMaxActive() - this.reconcileSummons(level)));
+    }
+
+    private void resetSpawnCycle(ServerLevel level, SpawnerState state) {
+        state.resetDelay(level.random, CommonConfig.DELAY_MULTIPLIER.get());
+        this.syncPreview();
+        this.clearSpawnPreparation();
+    }
+
+    private void clearSpawnPreparation() {
+        this.pendingSpawn = null;
+        this.spawnRetryTicks = 0;
         this.setPreparingToSpawn(false);
+        this.entityData.set(ATTEMPTING_TO_SPAWN, false);
     }
 
     @Nullable
-    private Entity trySpawnOne(ServerLevel level, SpawnerState state, SpawnData spawnData) {
+    private Entity prepareSpawnOne(ServerLevel level, SpawnData spawnData) {
         CompoundTag entityTag = spawnData.getEntityToSpawn();
         Optional<EntityType<?>> optionalType = EntityType.by(entityTag);
         if (optionalType.isEmpty()) {
@@ -278,18 +335,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             ? configuredPos.getDouble(2)
             : this.sourcePos.getZ() + (level.random.nextDouble() - level.random.nextDouble()) * range + 0.5;
 
-        if (!level.getWorldBorder().isWithinBounds(BlockPos.containing(x, y, z)) || !level.noCollision(type.getSpawnAABB(x, y, z))) {
-            return null;
-        }
-        BlockPos spawnPos = BlockPos.containing(x, y, z);
-        if (spawnData.getCustomSpawnRules().isPresent()) {
-            if (!type.getCategory().isFriendly() && level.getDifficulty() == Difficulty.PEACEFUL) {
-                return null;
-            }
-            if (!spawnData.getCustomSpawnRules().get().isValidPosition(spawnPos, level)) {
-                return null;
-            }
-        } else if (!SpawnPlacements.checkSpawnRules(type, level, MobSpawnType.SPAWNER, spawnPos, level.random)) {
+        if (!this.isValidSpawnPosition(level, spawnData, type, x, y, z)) {
             return null;
         }
 
@@ -303,10 +349,34 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         }
         entity.moveTo(entity.getX(), entity.getY(), entity.getZ(), level.random.nextFloat() * 360.0F, 0.0F);
 
+        if (entity instanceof Mob mob
+            && !EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, spawnData, this.eventSpawner)) {
+            return null;
+        }
+        return entity;
+    }
+
+    private boolean isValidSpawnPosition(ServerLevel level, SpawnData spawnData, EntityType<?> type, double x, double y, double z) {
+        BlockPos spawnPos = BlockPos.containing(x, y, z);
+        if (!level.getWorldBorder().isWithinBounds(spawnPos) || !level.noCollision(type.getSpawnAABB(x, y, z))) {
+            return false;
+        }
+        if (spawnData.getCustomSpawnRules().isPresent()) {
+            return (type.getCategory().isFriendly() || level.getDifficulty() != Difficulty.PEACEFUL)
+                && spawnData.getCustomSpawnRules().get().isValidPosition(spawnPos, level);
+        }
+        return SpawnPlacements.checkSpawnRules(type, level, MobSpawnType.SPAWNER, spawnPos, level.random);
+    }
+
+    private boolean isValidSpawnCandidate(ServerLevel level, SpawnData spawnData, Entity entity) {
+        return this.isValidSpawnPosition(level, spawnData, entity.getType(), entity.getX(), entity.getY(), entity.getZ())
+            && (!(entity instanceof Mob mob)
+                || EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, spawnData, this.eventSpawner));
+    }
+
+    private boolean spawnPreparedEntity(ServerLevel level, SpawnData spawnData, Entity entity) {
+        CompoundTag entityTag = spawnData.getEntityToSpawn();
         if (entity instanceof Mob mob) {
-            if (!EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, spawnData, this.eventSpawner)) {
-                return null;
-            }
             boolean vanillaFinalize = entityTag.size() == 1 && entityTag.contains("id", Tag.TAG_STRING);
             EventHooks.finalizeMobSpawnSpawner(
                 mob,
@@ -321,14 +391,14 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         }
 
         entity.getPersistentData().putUUID(OWNER_DATA_KEY, this.getUUID());
-        if (!level.tryAddFreshEntityWithPassengers(entity)) {
-            return null;
+        if (!level.tryAddFreshEntityWithPassengers(entity) || !entity.isAddedToLevel()) {
+            return false;
         }
-        level.gameEvent(entity, GameEvent.ENTITY_PLACE, spawnPos);
+        level.gameEvent(entity, GameEvent.ENTITY_PLACE, entity.blockPosition());
         if (entity instanceof Mob mob) {
             mob.spawnAnim();
         }
-        return entity;
+        return true;
     }
 
     private void trackSummon(Entity entity) {
@@ -440,6 +510,10 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         return this.entityData.get(PREPARING_TO_SPAWN);
     }
 
+    public boolean isAttemptingToSpawn() {
+        return this.entityData.get(ATTEMPTING_TO_SPAWN);
+    }
+
     public boolean isActive() {
         return this.entityData.get(ACTIVE);
     }
@@ -492,7 +566,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             this.level().addParticle(ParticleTypes.FLAME, x, y, z, 0.0, 0.0, 0.0);
         }
         int effectInterval = intensity == ClientConfig.ParticleIntensity.FULL ? 4 : 10;
-        if (this.isPreparingToSpawn() && this.tickCount % effectInterval == 0) {
+        if (this.isAttemptingToSpawn() && this.tickCount % effectInterval == 0) {
             this.level().addParticle(
                 ParticleTypes.SOUL_FIRE_FLAME,
                 this.getX() + (this.random.nextDouble() - 0.5) * 0.8,
@@ -587,7 +661,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         this.spawningStopped = true;
         this.active = false;
         this.entityData.set(ACTIVE, false);
-        this.setPreparingToSpawn(false);
+        this.clearSpawnPreparation();
         if (this.level() instanceof ServerLevel serverLevel) {
             LivingSpawnerRespawnManager.onDefeated(serverLevel, this);
             if (CommonConfig.DESPAWN_SUMMONS_ON_DEATH.get()) {
@@ -732,6 +806,7 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
             }
         }
         this.needsOwnershipRebuild = true;
+        this.clearSpawnPreparation();
         this.applyConfiguredAttributes(false);
         this.syncPreview();
     }

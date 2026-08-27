@@ -22,7 +22,7 @@ No library mods are required. Fought Not Farmed does not replace Minecraft's ter
 ## Installation
 
 1. Install NeoForge for Minecraft 1.21.1.
-2. Place `foughtnotfarmed-1.3.jar` in the instance's `mods` directory.
+2. Place `foughtnotfarmed-1.3.1.jar` in the instance's `mods` directory.
 3. Install the same JAR on the dedicated server and every client.
 4. Start the game or server once to generate the configuration files.
 
@@ -40,7 +40,7 @@ No library mods are required. Fought Not Farmed does not replace Minecraft's ter
 - A destroyed Living Spawner returns at its death position after 30 minutes of loaded server time by default. Respawning, the delay, server-time versus system-time tracking, and health-based delay scaling are configurable.
 - Optionally, defeat can leave a deactivated vanilla spawner block containing the preserved mob data. It can be mined by compatible spawner-mining mods, or it turns back into the Living Spawner when its respawn timer expires.
 - The cage uses Minecraft's spawner block model and renders the current mob preview with any available modded entity renderer.
-- Active cages emit vanilla smoke and flame particles. During the configurable warning window they shake and sound an alert, then briefly grow and shrink after a successful spawn cycle.
+- Active cages emit vanilla smoke and flame particles. Blocked spawn attempts keep blue flames without warning sounds or shake. Once a valid location is found, the cage plays its configurable warning, spawns, then sounds an alert and briefly grows and shrinks on success.
 
 ## Generic compatibility
 

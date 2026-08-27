@@ -28,11 +28,11 @@ The selected weighted entry is synchronized to clients for rendering. The full w
 
 ## Spawning
 
-The entity uses a countdown timer and checks player activation once per second. At zero it follows vanilla `BaseSpawner` behavior for candidate coordinates, collision, world border, custom light rules, `SpawnPlacements`, entity loading, mob finalization, optional equipment, level events, and mob spawn animation.
+The entity uses a countdown timer and checks player activation once per second. At the warning threshold it follows vanilla `BaseSpawner` behavior for candidate coordinates, collision, world border, custom light rules, `SpawnPlacements`, and entity loading. A candidate must also pass NeoForge's position hook before the warning begins. The exact unspawned entity is retained through the full configured warning, then its position and the current summon cap are checked again before finalization, equipment, insertion, level events, and mob spawn animation. Remaining attempts use the same candidate search as before.
 
 NeoForge's `checkSpawnPositionSpawner` and `finalizeMobSpawnSpawner` hooks require an owned `BaseSpawner`; a small delegate returns the Living Spawner as its owner. This retains spawn-cancellation and modification opportunities for other mods without ticking vanilla's private `BaseSpawner` implementation in parallel.
 
-Failed candidate positions use a short retry delay instead of performing expensive work every tick. Invalid dynamic state resets the normal delay and emits a rate-limited warning.
+Failed candidate positions use a separate 20-tick retry delay instead of performing expensive work every tick or re-entering the audible warning. The attempted-spawn flag keeps blue flames active independently of warning shake and sound. Prepared entities are transient and cleared on deactivation, death, or NBT reload. Invalid dynamic state resets the normal delay and emits a rate-limited warning. Successful-spawn effects require the root entity to have actually entered the level, since `tryAddFreshEntityWithPassengers` can report success even when an insertion event was cancelled.
 
 ## Ownership and cap
 
@@ -56,4 +56,4 @@ Due records are processed once per second. They do not force-load chunks: a due 
 
 Before entity creation, an optional bounded exposure search keeps an already accessible source position or selects the nearest valid destination in loaded chunks. The active anchor and original conversion position are persisted separately: spawning, rendering, and combat use the anchor, while interrupted-conversion recovery identifies the original block position.
 
-All conversion, health, spawning, ownership, death, and rewards are server-authoritative. The client entry point is `Dist.CLIENT` only and registers a renderer that uses the vanilla spawner block state plus `SpawnerRenderer.renderEntityInSpawner`. Synced entity data drives active flame particles and warning shake, while a standard entity event triggers the spawn pulse. No client class is referenced by the common mod entry point, and no custom gameplay packet is required.
+All conversion, health, spawning, ownership, death, and rewards are server-authoritative. The client entry point is `Dist.CLIENT` only and registers a renderer that uses the vanilla spawner block state plus `SpawnerRenderer.renderEntityInSpawner`. Separate synced flags drive active particles, attempted-spawn blue flames, and warning shake/preview acceleration, while a standard entity event triggers the spawn pulse. No client class is referenced by the common mod entry point, and no custom gameplay packet is required.
