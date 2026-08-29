@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.2 - 2026-08-28
+
+### Added
+
+- Added independent `ignoreBlockLight` and `ignoreSkyLight` Living Spawner settings, both enabled by default.
+
+### Changed
+
+- Living Spawners ignore block-emitted light and sky light by default while retaining collision, placement, entity-specific, and NeoForge spawn checks.
+
 ## 1.3.1 - 2026-08-27
 
 ### Fixed

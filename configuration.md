@@ -321,6 +321,8 @@ The `[spawning]` section modifies the values preserved from each original vanill
 | `requireLineOfSight` | `false` | `true`, `false` | If enabled, at least one alive, non-spectator player in activation range must have line of sight to the cage. |
 | `allowBossEntities` | `false` | `true`, `false` | Permits entity types in the `foughtnotfarmed:bosses` tag. It does not bypass filters, the hard unsupported tag, or normal spawn rules. |
 | `activateOnPeaceful` | `false` | `true`, `false` | If disabled, activation and delay countdown pause on Peaceful. If enabled, the timer may run, but normal placement rules still determine whether an entity can actually spawn. |
+| `ignoreBlockLight` | `true` | `true`, `false` | If enabled, block-emitted light cannot reject a Living Spawner candidate. If disabled, vanilla or preserved custom block-light rules apply. |
+| `ignoreSkyLight` | `true` | `true`, `false` | If enabled, sky light cannot reject a Living Spawner candidate. If disabled, vanilla or preserved custom sky-light rules apply. |
 | `spawnWarningTicks` | `40` | `0` to `1200` | Warning duration after a valid spawn candidate is found. The cage shakes and plays one warning sound before spawning. `0` disables this warning window. |
 
 #### Counts, caps, and delays
@@ -342,6 +344,20 @@ The Living Spawner attempts up to 6 summons per cycle, permits up to 12 currentl
 Setting `spawnCountMultiplier=0.0` produces zero spawn attempts. Setting the effective active cap to zero also prevents summons. Setting `spawnRangeMultiplier=0.0` keeps random horizontal positions centered on the cage, though the preserved entity NBT, vertical offset, collision, placement, light, and other spawn rules still apply.
 
 The current saved countdown is retained across saves. `delayMultiplier` is applied when the next delay is selected, not retroactively to a countdown already in progress.
+
+#### Light rules
+
+`ignoreBlockLight` and `ignoreSkyLight` are independent and both default to `true`. With both enabled, light alone cannot prevent a Living Spawner from preparing its summon. Disable either setting to restore that channel's vanilla or preserved `SpawnData.CustomSpawnRules` requirement. For vanilla rules that use combined raw light, only non-ignored channels contribute to the result.
+
+These settings apply only while a Living Spawner validates and revalidates its candidate. They do not change natural spawning, ordinary spawner blocks, or unrelated entity behavior. Ground/fluid requirements, world border, collision, difficulty, entity-specific non-light conditions, the NeoForge placement event, obstruction, and insertion cancellation continue to apply.
+
+Restore all original light behavior:
+
+```toml
+[spawning]
+ignoreBlockLight = false
+ignoreSkyLight = false
+```
 
 #### Spawn warning and pulse
 
@@ -521,6 +537,8 @@ spawnRangeMultiplier = 1.0
 requireLineOfSight = false
 allowBossEntities = false
 activateOnPeaceful = false
+ignoreBlockLight = true
+ignoreSkyLight = true
 spawnWarningTicks = 40
 
 [rewards]
@@ -602,6 +620,7 @@ Use `/foughtnotfarmed convert` while looking at a spawner for a permission-gated
 - Confirm an alive, non-spectator player is within the effective range.
 - If `requireLineOfSight=true`, confirm that player can see the cage.
 - On Peaceful, `activateOnPeaceful=false` pauses the timer. Enabling it still does not bypass normal mob spawn rules.
+- If either light override is disabled, confirm the candidate satisfies that channel's vanilla or preserved custom light rule.
 - An effective active cap of zero prevents spawning.
 - Loaded, living entities owned by that Living Spawner count against its cap.
 - Changing filters or boss policy also affects existing Living Spawners when they next evaluate a spawn cycle.

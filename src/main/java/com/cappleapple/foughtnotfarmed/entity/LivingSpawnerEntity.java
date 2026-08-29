@@ -4,6 +4,7 @@ import com.cappleapple.foughtnotfarmed.FoughtNotFarmed;
 import com.cappleapple.foughtnotfarmed.config.ClientConfig;
 import com.cappleapple.foughtnotfarmed.config.CommonConfig;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerEligibility;
+import com.cappleapple.foughtnotfarmed.spawner.SpawnerLightRules;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerState;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerTuning;
 import com.cappleapple.foughtnotfarmed.respawn.LivingSpawnerRespawnManager;
@@ -41,7 +42,6 @@ import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.SpawnPlacements;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -350,7 +350,14 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         entity.moveTo(entity.getX(), entity.getY(), entity.getZ(), level.random.nextFloat() * 360.0F, 0.0F);
 
         if (entity instanceof Mob mob
-            && !EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, spawnData, this.eventSpawner)) {
+            && !SpawnerLightRules.checkSpawnerPosition(
+                mob,
+                level,
+                spawnData,
+                this.eventSpawner,
+                CommonConfig.IGNORE_BLOCK_LIGHT.get(),
+                CommonConfig.IGNORE_SKY_LIGHT.get()
+            )) {
             return null;
         }
         return entity;
@@ -361,17 +368,32 @@ public final class LivingSpawnerEntity extends Mob implements Enemy, IOwnedSpawn
         if (!level.getWorldBorder().isWithinBounds(spawnPos) || !level.noCollision(type.getSpawnAABB(x, y, z))) {
             return false;
         }
+        boolean ignoreBlockLight = CommonConfig.IGNORE_BLOCK_LIGHT.get();
+        boolean ignoreSkyLight = CommonConfig.IGNORE_SKY_LIGHT.get();
         if (spawnData.getCustomSpawnRules().isPresent()) {
             return (type.getCategory().isFriendly() || level.getDifficulty() != Difficulty.PEACEFUL)
-                && spawnData.getCustomSpawnRules().get().isValidPosition(spawnPos, level);
+                && SpawnerLightRules.checkCustomRules(
+                    spawnData.getCustomSpawnRules().get(),
+                    level,
+                    spawnPos,
+                    ignoreBlockLight,
+                    ignoreSkyLight
+                );
         }
-        return SpawnPlacements.checkSpawnRules(type, level, MobSpawnType.SPAWNER, spawnPos, level.random);
+        return SpawnerLightRules.checkSpawnRules(type, level, spawnPos, level.random, ignoreBlockLight, ignoreSkyLight);
     }
 
     private boolean isValidSpawnCandidate(ServerLevel level, SpawnData spawnData, Entity entity) {
         return this.isValidSpawnPosition(level, spawnData, entity.getType(), entity.getX(), entity.getY(), entity.getZ())
             && (!(entity instanceof Mob mob)
-                || EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, spawnData, this.eventSpawner));
+                || SpawnerLightRules.checkSpawnerPosition(
+                    mob,
+                    level,
+                    spawnData,
+                    this.eventSpawner,
+                    CommonConfig.IGNORE_BLOCK_LIGHT.get(),
+                    CommonConfig.IGNORE_SKY_LIGHT.get()
+                ));
     }
 
     private boolean spawnPreparedEntity(ServerLevel level, SpawnData spawnData, Entity entity) {

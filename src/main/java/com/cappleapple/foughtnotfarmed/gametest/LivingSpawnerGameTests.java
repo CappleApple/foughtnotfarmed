@@ -5,6 +5,7 @@ import com.cappleapple.foughtnotfarmed.config.CommonConfig;
 import com.cappleapple.foughtnotfarmed.entity.LivingSpawnerEntity;
 import com.cappleapple.foughtnotfarmed.registry.ModEntities;
 import com.cappleapple.foughtnotfarmed.spawner.SpawnerState;
+import com.cappleapple.foughtnotfarmed.spawner.SpawnerLightRules;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +20,10 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.InclusiveRange;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.SpawnData;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.common.NeoForge;
@@ -36,6 +40,13 @@ public final class LivingSpawnerGameTests {
     private static final String EMPTY_TEMPLATE = "bastion/mobs/empty";
     private static final int WARNING_TICKS = 4;
     private static final List<String> SUCCESS_EVENTS = List.of("warning", "finalize", "join", "spawn sound");
+
+    private enum LightRuleMode {
+        ALL,
+        REJECT_BLOCK,
+        REJECT_SKY,
+        VANILLA
+    }
 
     private LivingSpawnerGameTests() {
     }
@@ -109,6 +120,94 @@ public final class LivingSpawnerGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY_TEMPLATE)
+    public static void customBlockLightCanBeIgnoredIndependently(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper, WARNING_TICKS, "minecraft:pig", LightRuleMode.REJECT_BLOCK)) {
+            fixture.setIgnoredLight(false, true);
+            fixture.tick(100);
+            fixture.assertWaitingSilently();
+            helper.assertTrue(fixture.events.isEmpty(), "Preserved custom block-light rules must apply when their override is disabled");
+
+            fixture.setIgnoredLight(true, false);
+            fixture.awaitWarning();
+            fixture.tick(WARNING_TICKS);
+            fixture.assertSuccessfulSpawn(SUCCESS_EVENTS);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY_TEMPLATE)
+    public static void customSkyLightCanBeIgnoredIndependently(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper, WARNING_TICKS, "minecraft:pig", LightRuleMode.REJECT_SKY)) {
+            fixture.setIgnoredLight(true, false);
+            fixture.tick(100);
+            fixture.assertWaitingSilently();
+            helper.assertTrue(fixture.events.isEmpty(), "Preserved custom sky-light rules must apply when their override is disabled");
+
+            fixture.setIgnoredLight(false, true);
+            fixture.awaitWarning();
+            fixture.tick(WARNING_TICKS);
+            fixture.assertSuccessfulSpawn(SUCCESS_EVENTS);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY_TEMPLATE, timeoutTicks = 150)
+    public static void vanillaBlockLightCanBeIgnoredIndependently(GameTestHelper helper) {
+        helper.runAfterDelay(5, () -> {
+            helper.setBlock(new BlockPos(3, 3, 2), Blocks.GLOWSTONE);
+            helper.runAfterDelay(5, () -> runVanillaBlockLightTest(helper));
+        });
+    }
+
+    private static void runVanillaBlockLightTest(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper, WARNING_TICKS, "minecraft:zombie", LightRuleMode.VANILLA)) {
+            int blockLight = helper.getLevel().getBrightness(LightLayer.BLOCK, fixture.spawnPos);
+            helper.assertTrue(
+                blockLight > helper.getLevel().dimensionType().monsterSpawnBlockLightLimit(),
+                "The GameTest light source must exceed the dimension's monster block-light limit"
+            );
+            fixture.setIgnoredLight(false, true);
+            fixture.assertVanillaPlacement(false, true, false);
+            fixture.tick(100);
+            fixture.assertWaitingSilently();
+            helper.assertTrue(fixture.events.isEmpty(), "Vanilla block-light rules must apply when their override is disabled");
+
+            fixture.setIgnoredLight(true, true);
+            fixture.assertVanillaPlacement(true, true, true);
+            fixture.awaitWarning();
+            fixture.tick(WARNING_TICKS);
+            fixture.assertSuccessfulSpawn(SUCCESS_EVENTS);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY_TEMPLATE)
+    public static void vanillaSkyLightCanBeIgnoredIndependently(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper, WARNING_TICKS, "minecraft:zombie", LightRuleMode.VANILLA)) {
+            int effectiveSkyLight = Math.max(
+                0,
+                helper.getLevel().getBrightness(LightLayer.SKY, fixture.spawnPos) - helper.getLevel().getSkyDarken()
+            );
+            helper.assertTrue(
+                effectiveSkyLight > helper.getLevel().dimensionType().monsterSpawnLightTest().getMaxValue(),
+                "The GameTest position must be too bright for a vanilla monster spawn"
+            );
+            fixture.setIgnoredLight(true, false);
+            fixture.assertVanillaPlacement(true, false, false);
+            fixture.tick(100);
+            fixture.assertWaitingSilently();
+            helper.assertTrue(fixture.events.isEmpty(), "Vanilla sky-light rules must apply when their override is disabled");
+
+            fixture.setIgnoredLight(true, true);
+            fixture.assertVanillaPlacement(true, true, true);
+            fixture.awaitWarning();
+            fixture.tick(WARNING_TICKS);
+            fixture.assertSuccessfulSpawn(SUCCESS_EVENTS);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY_TEMPLATE)
     public static void fullSummonCapDoesNotStartAnotherWarning(GameTestHelper helper) {
         try (Fixture fixture = new Fixture(helper, WARNING_TICKS)) {
             fixture.awaitWarning();
@@ -160,6 +259,8 @@ public final class LivingSpawnerGameTests {
         private final List<String> events = new ArrayList<>();
         private final List<Entity> summons = new ArrayList<>();
         private final int previousWarningTicks = CommonConfig.SPAWN_WARNING_TICKS.get();
+        private final boolean previousIgnoreBlockLight = CommonConfig.IGNORE_BLOCK_LIGHT.get();
+        private final boolean previousIgnoreSkyLight = CommonConfig.IGNORE_SKY_LIGHT.get();
         private final Consumer<PlayLevelSoundEvent.AtPosition> soundListener = this::onSound;
         private final Consumer<FinalizeSpawnEvent> finalizeListener = this::onFinalize;
         private final Consumer<EntityJoinLevelEvent> joinListener = this::onJoin;
@@ -170,8 +271,14 @@ public final class LivingSpawnerGameTests {
 
         @SuppressWarnings("removal")
         private Fixture(GameTestHelper helper, int warningTicks) {
+            this(helper, warningTicks, "minecraft:pig", LightRuleMode.ALL);
+        }
+
+        @SuppressWarnings("removal")
+        private Fixture(GameTestHelper helper, int warningTicks, String entityId, LightRuleMode lightRuleMode) {
             this.helper = helper;
             CommonConfig.SPAWN_WARNING_TICKS.set(warningTicks);
+            this.setIgnoredLight(true, true);
             BlockPos sourcePos = helper.absolutePos(new BlockPos(1, 3, 1));
             this.spawnPos = sourcePos.offset(2, 0, 0);
             helper.getLevel().setBlockAndUpdate(this.spawnPos.below(), Blocks.STONE.defaultBlockState());
@@ -179,7 +286,7 @@ public final class LivingSpawnerGameTests {
             this.openSpawn();
 
             CompoundTag entityTag = new CompoundTag();
-            entityTag.putString("id", "minecraft:pig");
+            entityTag.putString("id", entityId);
             entityTag.putBoolean("NoAI", true);
             entityTag.putString("CustomName", "\"Prepared summon\"");
             ListTag position = new ListTag();
@@ -187,9 +294,20 @@ public final class LivingSpawnerGameTests {
             position.add(DoubleTag.valueOf(this.spawnPos.getY()));
             position.add(DoubleTag.valueOf(this.spawnPos.getZ() + 0.5));
             entityTag.put("Pos", position);
-            SpawnData data = new SpawnData(entityTag, Optional.of(new SpawnData.CustomSpawnRules(
-                new InclusiveRange<>(0, 15), new InclusiveRange<>(0, 15)
-            )), Optional.empty());
+            InclusiveRange<Integer> allLight = new InclusiveRange<>(0, 15);
+            Optional<SpawnData.CustomSpawnRules> customRules = switch (lightRuleMode) {
+                case ALL -> Optional.of(new SpawnData.CustomSpawnRules(allLight, allLight));
+                case REJECT_BLOCK -> Optional.of(new SpawnData.CustomSpawnRules(
+                    excludedLight(helper.getLevel().getBrightness(LightLayer.BLOCK, this.spawnPos)),
+                    allLight
+                ));
+                case REJECT_SKY -> Optional.of(new SpawnData.CustomSpawnRules(
+                    allLight,
+                    excludedLight(helper.getLevel().getBrightness(LightLayer.SKY, this.spawnPos))
+                ));
+                case VANILLA -> Optional.empty();
+            };
+            SpawnData data = new SpawnData(entityTag, customRules, Optional.empty());
             CompoundTag stateTag = new CompoundTag();
             stateTag.put("SpawnData", SpawnData.CODEC.encodeStart(NbtOps.INSTANCE, data).getOrThrow());
             stateTag.putInt("Delay", 0);
@@ -211,6 +329,35 @@ public final class LivingSpawnerGameTests {
 
         private void movePlayerIntoRange() {
             this.player.setPos(this.spawner.getX() - 3, this.spawner.getY(), this.spawner.getZ());
+        }
+
+        private static InclusiveRange<Integer> excludedLight(int light) {
+            int excludedValue = light == 0 ? 1 : 0;
+            return new InclusiveRange<>(excludedValue, excludedValue);
+        }
+
+        private void setIgnoredLight(boolean block, boolean sky) {
+            CommonConfig.IGNORE_BLOCK_LIGHT.set(block);
+            CommonConfig.IGNORE_SKY_LIGHT.set(sky);
+        }
+
+        private void assertVanillaPlacement(boolean block, boolean sky, boolean expected) {
+            boolean actual = SpawnerLightRules.checkSpawnRules(
+                EntityType.ZOMBIE,
+                this.helper.getLevel(),
+                this.spawnPos,
+                RandomSource.create(742L),
+                block,
+                sky
+            );
+            this.helper.assertTrue(
+                actual == expected,
+                "Expected vanilla placement=" + expected + " with ignoreBlockLight=" + block
+                    + " and ignoreSkyLight=" + sky + ", but received " + actual
+                    + " (blockLight=" + this.helper.getLevel().getBrightness(LightLayer.BLOCK, this.spawnPos)
+                    + ", skyLight=" + this.helper.getLevel().getBrightness(LightLayer.SKY, this.spawnPos)
+                    + ", blockLimit=" + this.helper.getLevel().dimensionType().monsterSpawnBlockLightLimit() + ")"
+            );
         }
 
         private void openSpawn() {
@@ -244,10 +391,11 @@ public final class LivingSpawnerGameTests {
 
         private void assertSuccessfulSpawn(List<String> expectedEvents) {
             this.helper.assertTrue(this.events.equals(expectedEvents), "Expected event order " + expectedEvents + " but received " + this.events);
-            this.helper.assertTrue(this.spawner.activeSummonCount() == 1, "The real server must contain exactly one owned summon");
+            this.helper.assertTrue(this.summons.size() == 1, "The real server must insert exactly one owned summon");
             this.helper.assertTrue(!this.spawner.isAttemptingToSpawn() && !this.spawner.isPreparingToSpawn(), "Success must end the waiting and warning states");
             Entity summon = this.summons.getFirst();
             this.helper.assertTrue(summon.isAddedToLevel() && summon.blockPosition().equals(this.spawnPos), "The validated position must be reused for insertion");
+            this.helper.assertTrue(LivingSpawnerEntity.isOwnedBy(summon, this.spawner.getUUID()), "The inserted summon must retain its owner marker");
             this.helper.assertTrue(summon.getName().getString().equals("Prepared summon"), "Preparing an entity must preserve its custom NBT");
         }
 
@@ -296,6 +444,8 @@ public final class LivingSpawnerGameTests {
             this.helper.getLevel().getServer().getPlayerList().remove(this.player);
             this.player.discard();
             CommonConfig.SPAWN_WARNING_TICKS.set(this.previousWarningTicks);
+            CommonConfig.IGNORE_BLOCK_LIGHT.set(this.previousIgnoreBlockLight);
+            CommonConfig.IGNORE_SKY_LIGHT.set(this.previousIgnoreSkyLight);
         }
     }
 }

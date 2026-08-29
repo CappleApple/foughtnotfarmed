@@ -4,7 +4,12 @@
   "package": "com.cappleapple.foughtnotfarmed.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "BaseSpawnerMixin"
+    "AnimalMixin",
+    "BaseSpawnerMixin",
+    "BatMixin",
+    "GlowSquidMixin",
+    "MonsterMixin",
+    "PatrollingMonsterMixin"
   ],
   "injectors": {
     "defaultRequire": 1

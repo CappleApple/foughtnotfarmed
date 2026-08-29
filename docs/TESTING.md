@@ -9,15 +9,15 @@ Run with Java 21:
 .\gradlew.bat runGameTestServer --stacktrace
 ```
 
-The unit suite covers vanilla defaults, malformed/empty state, weighted pools, custom modded entity NBT, round-trip persistence, spawn-delay multiplication, health modes, respawn-delay clock units and health scaling, dormant-state preservation, active-cap modes, range tuning, hard bounds, and explicit whitelist/blacklist semantics.
+The unit suite covers vanilla defaults, malformed/empty state, weighted pools, custom modded entity NBT, round-trip persistence, spawn-delay multiplication, health modes, respawn-delay clock units and health scaling, dormant-state preservation, active-cap modes, range tuning, hard bounds, explicit whitelist/blacklist semantics, and independent custom/raw block-light and sky-light handling.
 
-The GameTests exercise real server entity ticks and capture warning sounds, NeoForge finalization/insertion events, and successful-spawn sounds. They cover blocked retries and recovery, candidate invalidation during warning, position-hook denial, disabled warnings, full summon caps, insertion cancellation, and activation loss. They verify synchronized effect flags and event order; client rendering and audio playback still require the gameplay checks below. GameTest classes are excluded from the release JAR.
+The GameTests exercise real server entity ticks and capture warning sounds, NeoForge finalization/insertion events, and successful-spawn sounds. They cover blocked retries and recovery, candidate invalidation during warning, position-hook denial, disabled warnings, full summon caps, insertion cancellation, activation loss, preserved custom light ranges, and vanilla block/sky light overrides. They verify synchronized effect flags and event order; client rendering and audio playback still require the gameplay checks below. GameTest classes are excluded from the release JAR.
 
 ## Dedicated-server smoke test
 
 1. Run `.\gradlew.bat runServer`.
 2. Accept `eula=true` in the generated development server when needed.
-3. Confirm NeoForge discovers `Fought Not Farmed 1.3.1` without loading client renderer classes.
+3. Confirm NeoForge discovers `Fought Not Farmed 1.3.2` without loading client renderer classes.
 4. Confirm a world is created and the log reaches `Done`.
 5. Stop through the server console or RCON.
 6. Confirm the world saves and shutdown completes cleanly.
@@ -74,6 +74,7 @@ The Gradle client run uses `run-client/` while the dedicated server uses `run/`,
 - Open a spawn location and confirm one warning sound and the full `spawnWarningTicks` of cage shake precede spawning, followed by the successful-spawn sound and grow/shrink pulse.
 - Block the prepared location during its warning and confirm no mob spawns into the obstruction and failed attempts return to quiet blue flames.
 - Set `spawnWarningTicks=0` and confirm blocked attempts still show blue flames and successful spawns still play their sound and pulse without a warning.
+- In a bright test area, verify the default `ignoreBlockLight=true` and `ignoreSkyLight=true` permit an otherwise valid hostile summon. Disable each setting separately and confirm only the restored light channel can reject it.
 - Confirm the selected preview rotates, scales, speeds up before spawning, and changes with weighted selection.
 - Join a dedicated server with two clients and confirm one authoritative spawn cycle occurs.
 - Test a normal spawner from at least one structure datapack/mod and one registered modded entity with custom NBT.

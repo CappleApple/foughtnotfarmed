@@ -91,6 +91,8 @@ public final class CommonConfig {
     public static final ModConfigSpec.BooleanValue REQUIRE_LINE_OF_SIGHT;
     public static final ModConfigSpec.BooleanValue ALLOW_BOSS_ENTITIES;
     public static final ModConfigSpec.BooleanValue ACTIVATE_ON_PEACEFUL;
+    public static final ModConfigSpec.BooleanValue IGNORE_BLOCK_LIGHT;
+    public static final ModConfigSpec.BooleanValue IGNORE_SKY_LIGHT;
     public static final ModConfigSpec.IntValue SPAWN_WARNING_TICKS;
 
     public static final ModConfigSpec.BooleanValue XP_ENABLED;
@@ -187,6 +189,12 @@ public final class CommonConfig {
             .define("allowBossEntities", false);
         ACTIVATE_ON_PEACEFUL = BUILDER.comment("If false, spawning timers pause on Peaceful. If true, normal placement rules still decide what may spawn.")
             .define("activateOnPeaceful", false);
+        IGNORE_BLOCK_LIGHT = BUILDER.comment(
+            "Ignore block-emitted light while Living Spawners validate spawn positions. Other placement rules still apply."
+        ).define("ignoreBlockLight", true);
+        IGNORE_SKY_LIGHT = BUILDER.comment(
+            "Ignore sky light while Living Spawners validate spawn positions. Other placement rules still apply."
+        ).define("ignoreSkyLight", true);
         SPAWN_WARNING_TICKS = BUILDER.comment("Warning duration after a valid spawn candidate is found. Blocked attempts keep blue flames without shaking or sounding an alert. Zero disables the warning.")
             .defineInRange("spawnWarningTicks", 40, 0, 1200);
         BUILDER.pop();
